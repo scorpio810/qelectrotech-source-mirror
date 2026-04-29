@@ -179,7 +179,6 @@ QString FileElementCollectionItem::localName(const ElementsLocation &location)
 	}
 	else if (isElement()) {
 		QString display_name = location.name();
-		// Schneide die Endung .qetmak für die Anzeige ab
 		if (display_name.endsWith(".qetmak")) {
 			display_name.remove(".qetmak");
 		}
@@ -216,7 +215,7 @@ QString FileElementCollectionItem::collectionPath() const
 		else if (m_path == QETApp::companyElementsDirN())
 			return "company://";
 		else if (m_path == macrosPath)
-			return "macros://"; // <-- NEU: Protokoll für Makros zuweisen
+			return "macros://"; //
 			else
 				return "custom://";
 	}
@@ -296,45 +295,48 @@ void FileElementCollectionItem::addChildAtPath(const QString &collection_name)
 }
 
 /**
-	@brief FileElementCollectionItem::setUpData
-	SetUp the data of this item
-*/
+ *   @brief FileElementCollectionItem::setUpData
+ *   SetUp the data of this item
+ */
 void FileElementCollectionItem::setUpData()
 {
 	if (isDir())
 	{
 		localName();
 		setFlags(Qt::ItemIsSelectable
-			 | Qt::ItemIsDragEnabled
-			 | Qt::ItemIsDropEnabled
-			 | Qt::ItemIsEnabled);
+		| Qt::ItemIsDragEnabled
+		| Qt::ItemIsDropEnabled
+		| Qt::ItemIsEnabled);
 	}
 	else
 	{
 		setFlags(Qt::ItemIsSelectable
-			 | Qt::ItemIsDragEnabled
-			 | Qt::ItemIsEnabled);
-		
-		//Set the local name and all informations of the element
-		//in the data Qt::UserRole+1, these data will be use for search.
-		ElementsLocation loc(collectionPath());
-		DiagramContext context = loc.elementInformations();
-		QStringList search_list;
-		for (QString& key : context.keys())
-		{ search_list.append(context.value(key).toString()); }
-		search_list.append(localName(loc));
-		setData(search_list.join(" "));
+		| Qt::ItemIsDragEnabled
+		| Qt::ItemIsEnabled);
+
+		if (m_path.endsWith(".qetmak")) {
+			setData(localName());
+		} else {
+			// Parse standard element information for search
+			ElementsLocation loc(collectionPath());
+			DiagramContext context = loc.elementInformations();
+			QStringList search_list;
+			for (QString& key : context.keys())
+			{ search_list.append(context.value(key).toString()); }
+			search_list.append(localName(loc));
+			setData(search_list.join(" "));
+		}
 	}
 
 	setToolTip(collectionPath());
 }
 
 /**
-	@brief FileElementCollectionItem::setUpIcon
-	SetUp the icon of this item.
-	Because icon use several memory,
-	we use this method for setup icon instead setUpData.
-*/
+ *   @brief FileElementCollectionItem::setUpIcon
+ *   SetUp the icon of this item.
+ *   Because icon use several memory,
+ *   we use this method for setup icon instead setUpData.
+ */
 void FileElementCollectionItem::setUpIcon()
 {
 	if (!icon().isNull())
@@ -349,17 +351,21 @@ void FileElementCollectionItem::setUpIcon()
 		else if (m_path == QETApp::companyElementsDirN())
 			setIcon(QIcon(":/ico/16x16/go-company.png"));
 		else if (m_path == macrosPath)
-			setIcon(QIcon(":/ico/16x16/go-home.png")); // <-- NEU: Icon für Makros (z.B. go-home)
-			else
-				setIcon(QIcon(":/ico/16x16/go-home.png"));
+			setIcon(QIcon(":/ico/16x16/go-home.png"));
+		else
+			setIcon(QIcon(":/ico/16x16/go-home.png"));
 	}
 	else
 	{
 		if (isDir()) {
 			setIcon(QET::Icons::Folder);
 		} else {
-			ElementsLocation loc(collectionPath());
-			setIcon(loc.icon());
+			if (m_path.endsWith(".qetmak")) {
+				setIcon(QIcon());
+			} else {
+				ElementsLocation loc(collectionPath());
+				setIcon(loc.icon());
+			}
 		}
 	}
 }

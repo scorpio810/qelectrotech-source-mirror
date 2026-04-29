@@ -246,9 +246,6 @@ void DiagramEventAddMacro::addMacro(QPointF final_pos)
 		QDomElement cloned_node = diagram_node.cloneNode(true).toElement();
 
 		QPointF target_pos = final_pos;
-		if (m_preview_item) {
-			target_pos += m_preview_item->offset();
-		}
 
 		DiagramContent pasted_content;
 
