@@ -135,42 +135,69 @@ void ElementsPanel::panelContentChange()
 	Le QTreeWidgetItem insere le plus haut
 */
 QTreeWidgetItem *ElementsPanel::addProject(QETProject *project,
-					   QTreeWidgetItem *parent_item,
-					   PanelOptions options)
+										   QTreeWidgetItem *parent_item,
+										   PanelOptions options)
 {
 	Q_UNUSED(parent_item)
 	Q_UNUSED(options)
-	
+
+	// 1. Save the current chart before clearing the selection
+	Diagram *current_diagram = nullptr;
+	if (QTreeWidgetItem *current_qtwi = currentItem()) {
+		if (current_qtwi->type() == QET::Diagram) {
+			current_diagram = valueForItem<Diagram *>(current_qtwi);
+		}
+	}
+
 	bool first_add = (first_reload_ || !projects_to_display_.contains(project));
 	clearSelection();
-	
-		// create the QTreeWidgetItem representing the project
+
+	// create the QTreeWidgetItem representing the project
 	QTreeWidgetItem *qtwi_project = GenericPanel::addProject(project, nullptr, GenericPanel::All);
-		// the project will be inserted right before the common tb templates collection
+	// the project will be inserted right before the common tb templates collection
 	invisibleRootItem() -> insertChild(
 		indexOfTopLevelItem(common_tbt_collection_item_),
-		qtwi_project
+									   qtwi_project
 	);
+
 	if (first_add){
 		qtwi_project -> setExpanded(true);
-			// on adding an project select first diagram
+		// on adding an project select first diagram
 		setCurrentItem(qtwi_project -> child(0));
 		qtwi_project -> child(0)->setSelected(true);
 	}
 	else {
+		// 2. Check whether we can restore the previous selection
+		bool restored = false;
+		if (current_diagram) {
+			// Browse the children of the project node to find our diagram
+			for (int i = 0; i < qtwi_project->childCount(); ++i) {
+				QTreeWidgetItem *child = qtwi_project->child(i);
+				if (child->type() == QET::Diagram && valueForItem<Diagram *>(child) == current_diagram) {
+					setCurrentItem(child);
+					child->setSelected(true);
+					restored = true;
+					break;
+				}
+			}
+		}
+
+		// 3. Fallback: Only if NOTHING could be restored (e.g., actually adding a new page)
+		if (!restored && qtwi_project->childCount() >= 2) {
 			// on adding an diagram to project select the last diagram
-		setCurrentItem(qtwi_project->child(qtwi_project->childCount()-2));
-		qtwi_project->child(qtwi_project->childCount()-2)->setSelected(true);
+			setCurrentItem(qtwi_project->child(qtwi_project->childCount()-2));
+			qtwi_project->child(qtwi_project->childCount()-2)->setSelected(true);
+		}
 	}
-	
+
 	if (TitleBlockTemplatesCollection *tbt_collection = project -> embeddedTitleBlockTemplatesCollection()) {
 		if (QTreeWidgetItem *tbt_collection_qtwi = itemForTemplatesCollection(tbt_collection)) {
 			if (first_add) tbt_collection_qtwi -> setExpanded(true);
 		}
 	}
-	
+
 	qtwi_project -> setStatusTip(0, tr("Double-cliquez pour réduire ou développer ce projet", "Status tip"));
-	
+
 	return(qtwi_project);
 }
 
