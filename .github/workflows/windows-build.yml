@@ -159,26 +159,26 @@ jobs:
           sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
           grep 'SOFT_VERSION' "$NSI"
 
-      - name: Build NSIS installer
-        shell: msys2 {0}
-        run: |
-          cd "$GITHUB_WORKSPACE/nsis_root"
-          makensis QET64.nsi
-          ls -lh Installer_QElectroTech-*.exe
+      # - name: Build NSIS installer
+      #   shell: msys2 {0}
+      #   run: |
+      #     cd "$GITHUB_WORKSPACE/nsis_root"
+      #     makensis QET64.nsi
+      #     ls -lh Installer_QElectroTech-*.exe
 
-      - name: Move installer to dist/
-        shell: msys2 {0}
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE/dist"
-          mv "$GITHUB_WORKSPACE/nsis_root"/Installer_QElectroTech-*.exe \
-             "$GITHUB_WORKSPACE/dist/"
+      # - name: Move installer to dist/
+      #   shell: msys2 {0}
+      #   run: |
+      #     mkdir -p "$GITHUB_WORKSPACE/dist"
+      #     mv "$GITHUB_WORKSPACE/nsis_root"/Installer_QElectroTech-*.exe \
+      #        "$GITHUB_WORKSPACE/dist/"
 
-      - name: Upload build logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: build/CMakeFiles/*.log
+      # - name: Upload build logs on failure
+      #   if: failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: build-logs
+      #     path: build/CMakeFiles/*.log
 
       - name: Upload portable (files/ sans installeur)
         uses: actions/upload-artifact@v4
