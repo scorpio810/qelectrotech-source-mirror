@@ -42,9 +42,14 @@ jobs:
             mingw-w64-ucrt-x86_64-extra-cmake-modules
             mingw-w64-ucrt-x86_64-nsis
 
-      - name: Force Qt5 by removing Qt6 cmake files
+      - name: Force Qt5 by removing Qt6 cmake files and tools
         shell: msys2 {0}
-        run: rm -rf /ucrt64/lib/cmake/Qt6
+        run: |
+          rm -rf /ucrt64/lib/cmake/Qt6
+          # Supprimer qt6-tools pour éviter que windeployqt Qt6 écrase windeployqt Qt5
+          pacman -R --noconfirm mingw-w64-ucrt-x86_64-qt6-tools 2>/dev/null || true
+          echo "windeployqt binaries present:"
+          ls /ucrt64/bin/windeployqt* || true
 
       - name: Build with cmake
         shell: msys2 {0}
@@ -99,11 +104,11 @@ jobs:
           # 1. Exécutable
           cp "$GITHUB_WORKSPACE/build/qelectrotech.exe" "$BIN/QElectroTech.exe"
 
-          # 2. DLLs Qt + plugins via windeployqt (déposés directement dans bin/)
-          #    NOTE: ne pas utiliser --dir car windeployqt Qt5 ne détecte pas
-          #    l'exe comme binaire Qt si les DLLs Qt ne sont pas encore présentes
-          #    au même endroit. On laisse windeployqt déployer à côté de l'exe.
-          /ucrt64/bin/windeployqt \
+          # 2. DLLs Qt + plugins via windeployqt-qt5 (binaire explicitement Qt5)
+          #    On utilise windeployqt-qt5 et non windeployqt car le runner peut
+          #    avoir qt6-tools installé qui écrase /ucrt64/bin/windeployqt.
+          #    On déploie directement dans bin/ sans --dir (requis par Qt5).
+          /ucrt64/bin/windeployqt-qt5 \
             --release \
             --no-translations \
             --no-compiler-runtime \
