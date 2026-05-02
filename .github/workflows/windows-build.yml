@@ -266,6 +266,20 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
+          echo "=== Contenu nsis_root/ ==="
+          ls "$GITHUB_WORKSPACE/nsis_root/"
+          echo "=== Contenu files/bin/ ==="
+          ls "$GITHUB_WORKSPACE/nsis_root/files/bin/" | head -20
+          echo "=== Recherche exe ==="
+          find "$GITHUB_WORKSPACE/nsis_root/files/bin/" -maxdepth 1 -iname "*.exe"
+
+          # S'assurer que l'exe s'appelle exactement QElectroTech.exe (casse exacte)
+          BIN="$GITHUB_WORKSPACE/nsis_root/files/bin"
+          if [ ! -f "$BIN/QElectroTech.exe" ]; then
+            EXE=$(find "$BIN" -maxdepth 1 -iname "qelectrotech.exe" | head -1)
+            [ -n "$EXE" ] && mv -v "$EXE" "$BIN/QElectroTech.exe" || { echo "ERROR: exe introuvable dans bin/"; exit 1; }
+          fi
+
           cd "$GITHUB_WORKSPACE/nsis_root"
           makensis QET64.nsi
 
