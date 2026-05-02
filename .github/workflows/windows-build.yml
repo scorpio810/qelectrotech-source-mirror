@@ -213,6 +213,22 @@ jobs:
           sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
           grep 'SOFT_VERSION' "$NSI"
 
+      - name: Prepare inject_cd script
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Ecrit le script python d'injection AVANT le step NSIS
+          # pour eviter tout probleme d'echappement dans le YAML
+          printf '%s\n' \
+            'import sys' \
+            'nsi, root = sys.argv[1], sys.argv[2]' \
+            'c = open(nsi, encoding="utf-8", errors="replace").read()' \
+            'open(nsi, "w", encoding="utf-8").write("!cd \"" + root + "\"\n" + c)' \
+            'print("injected: !cd " + root)' \
+            > /tmp/inject_cd.py
+          echo "inject_cd.py ecrit :"
+          cat /tmp/inject_cd.py
+
       - name: Build NSIS installer
         shell: msys2 {0}
         run: |
@@ -223,17 +239,10 @@ jobs:
           NSI_WIN=$(cygpath -w "$NSI")
           echo "NSIS_ROOT Windows : $NSIS_ROOT_WIN"
 
-          # QET64.nsi utilise des chemins relatifs -> injecter !cd en tete du .nsi
-          # On ecrit un script python tmp pour eviter les problemes d'echappement
-          cat > /tmp/inject_cd.py << 'PYEOF2'
-import sys
-nsi, root = sys.argv[1], sys.argv[2]
-content = open(nsi, encoding='utf-8', errors='replace').read()
-open(nsi, 'w', encoding='utf-8').write('!cd "' + root + '"\n' + content)
-print('injected: !cd ' + root)
-PYEOF2
+          # Injecter !cd en tete du .nsi pour que NSIS resolve les chemins
+          # relatifs (./files/bin/...) depuis nsis_root/ et non depuis le CWD du runner
           python3 /tmp/inject_cd.py "$NSI" "$NSIS_ROOT_WIN"
-          echo '--- Debut de QET64.nsi apres injection ---'
+          echo "--- Debut de QET64.nsi apres injection ---"
           head -5 "$NSI"
 
           makensis "$NSI_WIN"
