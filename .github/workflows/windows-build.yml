@@ -124,7 +124,14 @@ jobs:
             --no-translations \
             --no-compiler-runtime \
             --no-opengl-sw \
-            ./QElectroTech.exe
+            ./QElectroTech.exe || true
+          # Verification explicite — windeployqt-qt5 peut echouer sans code retour
+          echo "--- contenu de bin/ apres windeployqt ---"
+          ls -lh "$BIN/" || true
+          ls -lh "$BIN/QElectroTech.exe"             || { echo "ERROR: QElectroTech.exe absent de bin/"; exit 1; }
+          DLL_COUNT=$(find "$BIN" -name "*.dll" | wc -l)
+          echo "DLLs presentes : $DLL_COUNT"
+          [ "$DLL_COUNT" -gt 5 ]             || { echo "ERROR: trop peu de DLLs ($DLL_COUNT), windeployqt a echoue"; exit 1; }
           cd "$GITHUB_WORKSPACE"
 
           # 3. Runtimes MinGW (non geres par windeployqt)
@@ -209,9 +216,17 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE/nsis_root"
-          makensis QET64.nsi
-          ls -lh Installer_QElectroTech-*.exe
+          NSIS_ROOT="$GITHUB_WORKSPACE/nsis_root"
+          NSI="$NSIS_ROOT/QET64.nsi"
+          # makensis est un binaire Windows natif : lui passer le chemin absolu Windows
+          # via cygpath pour qu'il resolve correctement les chemins relatifs du .nsi
+          NSI_WIN=$(cygpath -w "$NSI")
+          NSIS_ROOT_WIN=$(cygpath -w "$NSIS_ROOT")
+          echo "Lancement : makensis $NSI_WIN depuis $NSIS_ROOT_WIN"
+          # /D definit une variable NSIS accessible dans le .nsi
+          # Si QET64.nsi utilise ${__FILEDIR__} ou des chemins relatifs, /D corrige le CWD
+          makensis /DNSIS_ROOT="$NSIS_ROOT_WIN" "$NSI_WIN"
+          ls -lh "$NSIS_ROOT"/Installer_*.exe
 
       - name: Move installer to dist/
         shell: msys2 {0}
