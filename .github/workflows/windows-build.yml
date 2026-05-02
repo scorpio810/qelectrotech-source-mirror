@@ -110,45 +110,44 @@ jobs:
           cd "$GITHUB_WORKSPACE"
 
           # --- DLLs runtime compilateur (non copiées par windeployqt) ---
-          echo "=== Copie DLLs runtime UCRT64 ==="
+          # --- DLLs runtime : copie automatique via ldd ---
+          # On copie d'abord les DLLs garanties (runtime GCC + KF5 + ICU)
+          # car ldd ne les liste pas toujours toutes (chargement dynamique).
+          echo "=== Copie DLLs runtime garanties ==="
           UCRT=/ucrt64/bin
           for dll in \
             libgcc_s_seh-1.dll \
             libstdc++-6.dll \
             libwinpthread-1.dll \
-            libgomp-1.dll \
-            libdouble-conversion.dll \
-            libpcre2-16-0.dll \
-            libzstd.dll \
-            libharfbuzz-0.dll \
-            libpng16-16.dll \
-            libfreetype-6.dll \
-            libbz2-1.dll \
-            libglib-2.0-0.dll \
-            libintl-8.dll \
-            libiconv-2.dll \
-            zlib1.dll \
-            libsqlite3-0.dll \
-            libmd4c.dll \
-            libgraphite2.dll \
-            libbrotlidec.dll \
-            libpcre2-8-0.dll; do
-            if [ -f "$UCRT/$dll" ]; then
-              cp -v "$UCRT/$dll" "$BIN/"
-            else
-              echo "WARN: $dll non trouve dans $UCRT"
-            fi
+            libgomp-1.dll; do
+            [ -f "$UCRT/$dll" ] && cp -v "$UCRT/$dll" "$BIN/" || echo "WARN: $dll non trouve"
           done
-
-          # ICU (le numéro de version peut varier, on copie tout)
           cp -v "$UCRT"/libicu*.dll "$BIN/" 2>/dev/null || echo "WARN: libicu*.dll non trouvees"
+          cp -v "$UCRT"/KF5*.dll   "$BIN/" 2>/dev/null || echo "WARN: KF5*.dll non trouvees"
 
-          # KDE Frameworks 5 (kwidgetsaddons, kcoreaddons)
-          cp -v "$UCRT"/KF5*.dll "$BIN/" 2>/dev/null || echo "WARN: KF5*.dll non trouvees"
+          # Copie automatique de toutes les dependances UCRT64 detectees par ldd
+          echo "=== Copie automatique dependances ldd ==="
+          ldd "$BIN/QElectroTech.exe" \
+            | grep -i '/ucrt64/bin/' \
+            | awk '{print $3}' \
+            | while read -r dep; do
+                cp -v "$dep" "$BIN/" 2>/dev/null || true
+              done
+
+          # Passe recursive : certaines DLLs ont elles-memes des dependances UCRT64
+          echo "=== Passe recursive sur les DLLs copiees ==="
+          find "$BIN" -maxdepth 1 -name "*.dll" | while read -r lib; do
+            ldd "$lib" 2>/dev/null \
+              | grep -i '/ucrt64/bin/' \
+              | awk '{print $3}' \
+              | while read -r dep; do
+                  [ -f "$BIN/$(basename "$dep")" ] || cp -v "$dep" "$BIN/" 2>/dev/null || true
+                done
+          done
 
           echo "DLLs totales apres runtime : $(find "$BIN" -name '*.dll' | wc -l)"
 
-          # --- Diagnostic : DLLs encore manquantes ---
+          # --- Diagnostic final ---
           echo "=== ldd — dependances non resolues ==="
           ldd "$BIN/QElectroTech.exe" | grep -i "not found" || echo "Aucune dependance manquante detectee"
 
@@ -236,14 +235,15 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.qet_version.outputs.version }}"
           NSI="$GITHUB_WORKSPACE/nsis_root/QET64.nsi"
-          ROOT=$(cygpath -w "$GITHUB_WORKSPACE/nsis_root")
-          ROOT_FWD=$(echo "$ROOT" | tr '\\' '/')
+          # Chemin absolu en forward-slashes : NSIS (MSYS2) les accepte nativement
+          ROOT_FWD=$(cygpath -u "$GITHUB_WORKSPACE/nsis_root" | sed 's|/|//|g' || true)
+          ROOT_FWD=$(cygpath -m "$GITHUB_WORKSPACE/nsis_root")
 
           sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
 
+          # Patcher les chemins "files/" relatifs -> absolus (forward-slashes, NSIS MSYS2 OK)
           # Les chemins ".\images\" sont laisses relatifs : makensis tourne
-          # depuis nsis_root/ (working-directory) et les resout correctement.
-          # On patche uniquement les chemins "files/" en absolus.
+          # depuis nsis_root/ et les resout correctement.
           sed -i \
             -e "s|\"\./files/|\"${ROOT_FWD}/files/|g" \
             -e "s|\"files\\\\|\"${ROOT_FWD}/files/|g" \
@@ -256,10 +256,10 @@ jobs:
           grep -n 'File\|LICENSE\|images' "$NSI" | head -15
 
       - name: Build NSIS installer
-        shell: cmd
-        working-directory: ${{ github.workspace }}\nsis_root
+        shell: msys2 {0}
         run: |
-          set PATH=%RUNNER_TEMP%\msys64\ucrt64\bin;%RUNNER_TEMP%\msys64\usr\bin;%PATH%
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/nsis_root"
           makensis QET64.nsi
 
       - name: Move installer to dist/
