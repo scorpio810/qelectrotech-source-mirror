@@ -153,15 +153,36 @@ jobs:
           echo "version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $FULL_VERSION"
 
-      - name: Patch SOFT_VERSION in QET64.nsi
+      - name: Patch QET64.nsi — version et chemins
         shell: msys2 {0}
         run: |
           set -euo pipefail
           VERSION="${{ steps.qet_version.outputs.version }}"
           NSI="$GITHUB_WORKSPACE/nsis_root/QET64.nsi"
-          sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
-          grep 'SOFT_VERSION' "$NSI"
+          ROOT=$(cygpath -w "$GITHUB_WORKSPACE/nsis_root")
+          # Convertir backslashes en slashes : NSIS accepte les deux
+          ROOT_FWD=$(echo "$ROOT" | tr '\\' '/')
 
+          # 1. Patcher la version
+          sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
+
+          # 2. Patcher les chemins relatifs -> absolus
+          # QET64.nsi utilise './files/...' que NSIS resout depuis
+          # ${__FILEDIR__} (= repertoire du .nsi = nsis_root/)
+          # En pratique makensis le resout depuis son CWD qui
+          # n'est pas toujours nsis_root/. On force des chemins absolus.
+          sed -i \
+            -e "s|\"\./files/|\"${ROOT_FWD}/files/|g" \
+            -e "s|\"files\\\\|\"${ROOT_FWD}/files/|g" \
+            -e "s|\"files/LICENSE\"|\"${ROOT_FWD}/files/LICENSE\"|g" \
+            -e "s|\"\.\\\\images\\\\|\"${ROOT_FWD}/images/|g" \
+            -e "s|\"\./images/|\"${ROOT_FWD}/images/|g" \
+            "$NSI"
+
+          echo '=== SOFT_VERSION ==='
+          grep 'SOFT_VERSION' "$NSI"
+          echo '=== File directives (10 premieres) ==='
+          grep -n 'File\|LICENSE\|images' "$NSI" | head -15
       - name: Build NSIS installer
         shell: cmd
         working-directory: ${{ github.workspace }}\nsis_root
