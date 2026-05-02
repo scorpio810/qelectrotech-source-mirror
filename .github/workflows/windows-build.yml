@@ -117,12 +117,15 @@ jobs:
           #    - sans --dir : Qt5 windeployqt deploie a cote de l'exe
           #    - --no-opengl-sw : evite erreur libGLESv2.dll si angleproject absent
           echo "=== windeployqt-qt5 ==="
+          # cd dans bin/ : windeployqt-qt5 deploie les plugins dans le CWD
+          cd "$BIN"
           /ucrt64/bin/windeployqt-qt5 \
             --release \
             --no-translations \
             --no-compiler-runtime \
             --no-opengl-sw \
-            "$BIN/QElectroTech.exe"
+            ./QElectroTech.exe
+          cd "$GITHUB_WORKSPACE"
 
           # 3. Runtimes MinGW (non geres par windeployqt)
           cp /ucrt64/bin/libgcc_s_seh-1.dll  "$BIN/"
