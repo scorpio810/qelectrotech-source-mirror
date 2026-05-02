@@ -109,11 +109,44 @@ jobs:
           [ "$DLL_COUNT" -gt 5 ] || { echo "ERROR: trop peu de DLLs"; exit 1; }
           cd "$GITHUB_WORKSPACE"
 
-          cp /ucrt64/bin/libgcc_s_seh-1.dll  "$BIN/"
-          cp /ucrt64/bin/libstdc++-6.dll      "$BIN/"
-          cp /ucrt64/bin/libwinpthread-1.dll  "$BIN/"
-          cp /ucrt64/bin/KF5*.dll "$BIN/" || true
-          cp /ucrt64/bin/libsqlite3-0.dll "$BIN/" || true
+          # --- DLLs runtime compilateur (non copiées par windeployqt) ---
+          echo "=== Copie DLLs runtime UCRT64 ==="
+          UCRT=/ucrt64/bin
+          for dll in \
+            libgcc_s_seh-1.dll \
+            libstdc++-6.dll \
+            libwinpthread-1.dll \
+            libgomp-1.dll \
+            libdouble-conversion.dll \
+            libpcre2-16-0.dll \
+            libzstd.dll \
+            libharfbuzz-0.dll \
+            libpng16-16.dll \
+            libfreetype-6.dll \
+            libbz2-1.dll \
+            libglib-2.0-0.dll \
+            libintl-8.dll \
+            libiconv-2.dll \
+            zlib1.dll \
+            libsqlite3-0.dll; do
+            if [ -f "$UCRT/$dll" ]; then
+              cp -v "$UCRT/$dll" "$BIN/"
+            else
+              echo "WARN: $dll non trouve dans $UCRT"
+            fi
+          done
+
+          # ICU (le numéro de version peut varier, on copie tout)
+          cp -v "$UCRT"/libicu*.dll "$BIN/" 2>/dev/null || echo "WARN: libicu*.dll non trouvees"
+
+          # KDE Frameworks 5 (kwidgetsaddons, kcoreaddons)
+          cp -v "$UCRT"/KF5*.dll "$BIN/" 2>/dev/null || echo "WARN: KF5*.dll non trouvees"
+
+          echo "DLLs totales apres runtime : $(find "$BIN" -name '*.dll' | wc -l)"
+
+          # --- Diagnostic : DLLs encore manquantes ---
+          echo "=== ldd — dependances non resolues ==="
+          ldd "$BIN/QElectroTech.exe" | grep -i "not found" || echo "Aucune dependance manquante detectee"
 
           cp -r "$GITHUB_WORKSPACE/elements"    "$FILES/elements"    || true
           cp -r "$GITHUB_WORKSPACE/lang"        "$FILES/lang"        || true
@@ -160,17 +193,10 @@ jobs:
           VERSION="${{ steps.qet_version.outputs.version }}"
           NSI="$GITHUB_WORKSPACE/nsis_root/QET64.nsi"
           ROOT=$(cygpath -w "$GITHUB_WORKSPACE/nsis_root")
-          # Convertir backslashes en slashes : NSIS accepte les deux
           ROOT_FWD=$(echo "$ROOT" | tr '\\' '/')
 
-          # 1. Patcher la version
           sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
 
-          # 2. Patcher les chemins relatifs -> absolus
-          # QET64.nsi utilise './files/...' que NSIS resout depuis
-          # ${__FILEDIR__} (= repertoire du .nsi = nsis_root/)
-          # En pratique makensis le resout depuis son CWD qui
-          # n'est pas toujours nsis_root/. On force des chemins absolus.
           sed -i \
             -e "s|\"\./files/|\"${ROOT_FWD}/files/|g" \
             -e "s|\"files\\\\|\"${ROOT_FWD}/files/|g" \
@@ -183,12 +209,14 @@ jobs:
           grep 'SOFT_VERSION' "$NSI"
           echo '=== File directives (10 premieres) ==='
           grep -n 'File\|LICENSE\|images' "$NSI" | head -15
+
       - name: Build NSIS installer
         shell: cmd
         working-directory: ${{ github.workspace }}\nsis_root
         run: |
           set PATH=%RUNNER_TEMP%\msys64\ucrt64\bin;%RUNNER_TEMP%\msys64\usr\bin;%PATH%
           makensis QET64.nsi
+
       - name: Move installer to dist/
         shell: msys2 {0}
         run: |
