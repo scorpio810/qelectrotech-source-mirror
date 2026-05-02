@@ -128,7 +128,8 @@ jobs:
             libintl-8.dll \
             libiconv-2.dll \
             zlib1.dll \
-            libsqlite3-0.dll; do
+            libsqlite3-0.dll \
+            libmd4c.dll; do
             if [ -f "$UCRT/$dll" ]; then
               cp -v "$UCRT/$dll" "$BIN/"
             else
@@ -172,6 +173,46 @@ jobs:
             printf '@echo off\r\nstart "" "%%~dp0bin\\QElectroTech.exe" %%*\r\n' \
               > "$NSIS_ROOT/Lancer QET.bat"
           fi
+
+      - name: Ensure NSIS images (wizard.bmp + header.bmp)
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          IMG_SRC="$GITHUB_WORKSPACE/build-aux/windows/images"
+          IMG_DST="$GITHUB_WORKSPACE/nsis_root/images"
+          mkdir -p "$IMG_DST"
+
+          if [ -f "$IMG_SRC/wizard.bmp" ] && [ -f "$IMG_SRC/header.bmp" ]; then
+            echo "Images trouvees dans le repo, copie directe."
+            cp "$IMG_SRC/wizard.bmp" "$IMG_DST/wizard.bmp"
+            cp "$IMG_SRC/header.bmp" "$IMG_DST/header.bmp"
+          else
+            echo "Images absentes du repo — generation avec ImageMagick."
+            # wizard.bmp : 164x314 px, fond bleu QET, texte blanc
+            convert \
+              -size 164x314 \
+              gradient:"#1a3a5c"-"#2e6da4" \
+              -gravity Center \
+              -fill white \
+              -pointsize 13 \
+              -annotate 0 "QElectroTech" \
+              -type TrueColor \
+              BMP3:"$IMG_DST/wizard.bmp"
+            # header.bmp : 150x57 px, même palette
+            convert \
+              -size 150x57 \
+              gradient:"#1a3a5c"-"#2e6da4" \
+              -gravity Center \
+              -fill white \
+              -pointsize 11 \
+              -annotate 0 "QElectroTech" \
+              -type TrueColor \
+              BMP3:"$IMG_DST/header.bmp"
+            echo "BMPs generes."
+          fi
+
+          echo "Contenu de nsis_root/images/ :"
+          ls -lh "$IMG_DST/"
 
       - name: Extract version for installer name
         shell: msys2 {0}
