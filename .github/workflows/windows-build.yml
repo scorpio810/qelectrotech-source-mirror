@@ -218,14 +218,21 @@ jobs:
           set -euo pipefail
           NSIS_ROOT="$GITHUB_WORKSPACE/nsis_root"
           NSI="$NSIS_ROOT/QET64.nsi"
-          # makensis est un binaire Windows natif : lui passer le chemin absolu Windows
-          # via cygpath pour qu'il resolve correctement les chemins relatifs du .nsi
-          NSI_WIN=$(cygpath -w "$NSI")
           NSIS_ROOT_WIN=$(cygpath -w "$NSIS_ROOT")
-          echo "Lancement : makensis $NSI_WIN depuis $NSIS_ROOT_WIN"
-          # /D definit une variable NSIS accessible dans le .nsi
-          # Si QET64.nsi utilise ${__FILEDIR__} ou des chemins relatifs, /D corrige le CWD
-          makensis /DNSIS_ROOT="$NSIS_ROOT_WIN" "$NSI_WIN"
+          NSI_WIN=$(cygpath -w "$NSI")
+          echo "NSIS_ROOT Windows : $NSIS_ROOT_WIN"
+
+          # QET64.nsi utilise des chemins relatifs comme ./files/bin/QElectroTech.exe
+          # NSIS resout ces chemins par rapport au CWD du processus makensis,
+          # qui est le CWD du runner Windows (pas nsis_root/).
+          # Solution : injecter !cd au debut du .nsi pour forcer le CWD a nsis_root.
+          # On insere apres la premiere ligne (qui peut etre un commentaire ou !define).
+          INJECT="\n!cd \"$NSIS_ROOT_WIN\""
+          sed -i "1a $INJECT" "$NSI"
+          echo "--- Debut de QET64.nsi apres injection ---"
+          head -5 "$NSI"
+
+          makensis "$NSI_WIN"
           ls -lh "$NSIS_ROOT"/Installer_*.exe
 
       - name: Move installer to dist/
