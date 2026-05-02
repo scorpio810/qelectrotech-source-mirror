@@ -223,15 +223,16 @@ jobs:
           NSI_WIN=$(cygpath -w "$NSI")
           echo "NSIS_ROOT Windows : $NSIS_ROOT_WIN"
 
-          # QET64.nsi utilise des chemins relatifs comme ./files/bin/QElectroTech.exe
-          # sed echappe mal les backslashes Windows, on utilise python3.
-          python3 -c "
-nsi = open('$NSI', encoding='utf-8', errors='replace').read()
-root = r'$NSIS_ROOT_WIN'
-inject = '!cd \"' + root + '\"\n'
-open('$NSI', 'w', encoding='utf-8').write(inject + nsi)
+          # QET64.nsi utilise des chemins relatifs -> injecter !cd en tete du .nsi
+          # On ecrit un script python tmp pour eviter les problemes d'echappement
+          cat > /tmp/inject_cd.py << 'PYEOF2'
+import sys
+nsi, root = sys.argv[1], sys.argv[2]
+content = open(nsi, encoding='utf-8', errors='replace').read()
+open(nsi, 'w', encoding='utf-8').write('!cd "' + root + '"\n' + content)
 print('injected: !cd ' + root)
-"
+PYEOF2
+          python3 /tmp/inject_cd.py "$NSI" "$NSIS_ROOT_WIN"
           echo '--- Debut de QET64.nsi apres injection ---'
           head -5 "$NSI"
 
