@@ -41,6 +41,7 @@ jobs:
             mingw-w64-ucrt-x86_64-kcoreaddons
             mingw-w64-ucrt-x86_64-extra-cmake-modules
             mingw-w64-ucrt-x86_64-nsis
+            mingw-w64-ucrt-x86_64-angleproject
 
       - name: Force Qt5 by removing Qt6 cmake files and tools
         shell: msys2 {0}
@@ -112,6 +113,7 @@ jobs:
             --release \
             --no-translations \
             --no-compiler-runtime \
+            --no-opengl-sw \
             "$BIN/QElectroTech.exe"
 
           # 3. Runtimes MinGW (non gérés par windeployqt)
