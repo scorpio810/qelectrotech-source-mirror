@@ -163,16 +163,11 @@ jobs:
           grep 'SOFT_VERSION' "$NSI"
 
       - name: Build NSIS installer
-        shell: msys2 {0}
-        working-directory: ${{ github.workspace }}/nsis_root
+        shell: cmd
+        working-directory: ${{ github.workspace }}\nsis_root
         run: |
-          set -euo pipefail
-          # working-directory fixe le CWD Windows du processus makensis
-          # makensis resout alors ./files/bin/ depuis nsis_root/ correctement
-          NSI_WIN=$(cygpath -w QET64.nsi)
-          makensis "$NSI_WIN"
-          ls -lh Installer_*.exe
-
+          set PATH=%RUNNER_TEMP%\msys64\ucrt64\bin;%RUNNER_TEMP%\msys64\usr\bin;%PATH%
+          makensis QET64.nsi
       - name: Move installer to dist/
         shell: msys2 {0}
         run: |
