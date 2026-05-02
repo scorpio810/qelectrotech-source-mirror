@@ -243,45 +243,47 @@ jobs:
           echo "version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $FULL_VERSION"
 
-      - name: Patch QET64.nsi — version uniquement
+      - name: Patch QET64.nsi — version et separateurs
         shell: msys2 {0}
         run: |
           set -euo pipefail
           VERSION="${{ steps.qet_version.outputs.version }}"
           NSI="$GITHUB_WORKSPACE/nsis_root/QET64.nsi"
 
-          # Patch version uniquement.
-          # Tous les chemins du .nsi sont relatifs (./files/, .\images\) et
-          # sont resolus par makensis depuis nsis_root/ — aucun patch necessaire.
+          # Patch version
           sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
+
+          # makensis.exe est un binaire natif Windows : il ne resout pas les
+          # chemins POSIX "./files/..." depuis MSYS2.
+          # On remplace tous les "./" par ".\" (separateur Windows).
+          sed -i 's|\./|.\\|g' "$NSI"
+
+          # Le .nsi ne copie que l'exe seul — on remplace par File /r pour
+          # embarquer tout le dossier bin\ (exe + toutes les DLLs + sous-dossiers Qt).
+          sed -i 's|File "\.\\files\\bin\\${SOFT_NAME}\.exe"|File /r ".\\files\\bin"|' "$NSI"
 
           echo '=== SOFT_VERSION ==='
           grep 'SOFT_VERSION' "$NSI"
-          echo '=== Structure nsis_root ==='
-          ls "$GITHUB_WORKSPACE/nsis_root/"
-          echo '=== Contenu files/bin (premiers fichiers) ==='
-          ls "$GITHUB_WORKSPACE/nsis_root/files/bin/" | head -10
+          echo '=== File directives ==='
+          grep -n '^[[:space:]]*File\b' "$NSI" | head -10
 
       - name: Build NSIS installer
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          echo "=== Contenu nsis_root/ ==="
-          ls "$GITHUB_WORKSPACE/nsis_root/"
-          echo "=== Contenu files/bin/ ==="
-          ls "$GITHUB_WORKSPACE/nsis_root/files/bin/" | head -20
-          echo "=== Recherche exe ==="
-          find "$GITHUB_WORKSPACE/nsis_root/files/bin/" -maxdepth 1 -iname "*.exe"
 
           # S'assurer que l'exe s'appelle exactement QElectroTech.exe (casse exacte)
           BIN="$GITHUB_WORKSPACE/nsis_root/files/bin"
           if [ ! -f "$BIN/QElectroTech.exe" ]; then
             EXE=$(find "$BIN" -maxdepth 1 -iname "qelectrotech.exe" | head -1)
-            [ -n "$EXE" ] && mv -v "$EXE" "$BIN/QElectroTech.exe" || { echo "ERROR: exe introuvable dans bin/"; exit 1; }
+            [ -n "$EXE" ] && mv -v "$EXE" "$BIN/QElectroTech.exe" \
+              || { echo "ERROR: exe introuvable dans bin/"; exit 1; }
           fi
 
-          cd "$GITHUB_WORKSPACE/nsis_root"
-          makensis QET64.nsi
+          # -CD force le CWD Windows de makensis (binaire natif)
+          NSIS_ROOT_WIN=$(cygpath -w "$GITHUB_WORKSPACE/nsis_root")
+          NSI_WIN=$(cygpath -w "$GITHUB_WORKSPACE/nsis_root/QET64.nsi")
+          makensis -CD "$NSIS_ROOT_WIN" "$NSI_WIN"
 
       - name: Move installer to dist/
         shell: msys2 {0}
