@@ -48,11 +48,9 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf /ucrt64/lib/cmake/Qt6
-          # Supprimer qt6-tools si présent pour éviter que windeployqt Qt6
-          # écrase /ucrt64/bin/windeployqt au détriment de la version Qt5
           pacman -R --noconfirm mingw-w64-ucrt-x86_64-qt6-tools 2>/dev/null || true
           echo "=== windeployqt binaries ==="
-          ls /ucrt64/bin/windeployqt* || echo "AUCUN windeployqt trouvé !"
+          ls /ucrt64/bin/windeployqt* || echo "AUCUN windeployqt trouve !"
 
       - name: Build with cmake
         shell: msys2 {0}
@@ -77,47 +75,27 @@ jobs:
           set -euo pipefail
           EXE=$(find "$GITHUB_WORKSPACE/build" -maxdepth 3 -iname "qelectrotech.exe" | head -1)
           if [ -z "$EXE" ]; then
-            echo "ERROR: aucun qelectrotech.exe trouvé dans build/"
-            echo "--- .exe présents ---"
+            echo "ERROR: aucun qelectrotech.exe trouve dans build/"
             find "$GITHUB_WORKSPACE/build" -maxdepth 3 -name "*.exe" || true
             exit 1
           fi
           SIZE=$(stat -c%s "$EXE")
-          echo "Exe trouvé : $EXE ($SIZE octets)"
-          [ "$SIZE" -gt 100000 ] || { echo "ERROR: exe trop petit, build incomplet"; exit 1; }
+          echo "Exe trouve : $EXE ($SIZE octets)"
+          [ "$SIZE" -gt 100000 ] || { echo "ERROR: exe trop petit"; exit 1; }
 
       - name: Deploy — copie exe + windeployqt + DLLs
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          # ── Arborescence cible pour QET64.nsi ────────────────────────────
-          # nsis_root/
-          #   files/
-          #     bin/   <- QElectroTech.exe + toutes les DLLs + plugins Qt
-          #     elements/ lang/ titleblocks/ examples/ fonts/ ico/
-          #     LICENSE ChangeLog CREDIT README ...
-          #   images/            <- wizard.bmp, header.bmp (UI installeur)
-          #   lang_extra*.nsh
-          #   Lancer QET.bat
-          #   QET64.nsi
-          # -----------------------------------------------------------------
-
           NSIS_ROOT="$GITHUB_WORKSPACE/nsis_root"
           FILES="$NSIS_ROOT/files"
           BIN="$FILES/bin"
           mkdir -p "$BIN"
 
-          # 1. Exécutable
           EXE=$(find "$GITHUB_WORKSPACE/build" -maxdepth 3 -iname "qelectrotech.exe" | head -1)
           echo "Copie exe : $EXE -> $BIN/QElectroTech.exe"
           cp "$EXE" "$BIN/QElectroTech.exe"
 
-          # 2. DLLs Qt5 + plugins via windeployqt-qt5
-          #    - windeployqt-qt5 : nom fixe Qt5, jamais ecrase par qt6-tools
-          #    - sans --dir : Qt5 windeployqt deploie a cote de l'exe
-          #    - --no-opengl-sw : evite erreur libGLESv2.dll si angleproject absent
-          echo "=== windeployqt-qt5 ==="
-          # cd dans bin/ : windeployqt-qt5 deploie les plugins dans le CWD
           cd "$BIN"
           /ucrt64/bin/windeployqt-qt5 \
             --release \
@@ -125,27 +103,18 @@ jobs:
             --no-compiler-runtime \
             --no-opengl-sw \
             ./QElectroTech.exe || true
-          # Verification explicite — windeployqt-qt5 peut echouer sans code retour
-          echo "--- contenu de bin/ apres windeployqt ---"
-          ls -lh "$BIN/" || true
-          ls -lh "$BIN/QElectroTech.exe"             || { echo "ERROR: QElectroTech.exe absent de bin/"; exit 1; }
+          ls -lh "$BIN/QElectroTech.exe" || { echo "ERROR: exe absent de bin/"; exit 1; }
           DLL_COUNT=$(find "$BIN" -name "*.dll" | wc -l)
           echo "DLLs presentes : $DLL_COUNT"
-          [ "$DLL_COUNT" -gt 5 ]             || { echo "ERROR: trop peu de DLLs ($DLL_COUNT), windeployqt a echoue"; exit 1; }
+          [ "$DLL_COUNT" -gt 5 ] || { echo "ERROR: trop peu de DLLs"; exit 1; }
           cd "$GITHUB_WORKSPACE"
 
-          # 3. Runtimes MinGW (non geres par windeployqt)
           cp /ucrt64/bin/libgcc_s_seh-1.dll  "$BIN/"
           cp /ucrt64/bin/libstdc++-6.dll      "$BIN/"
           cp /ucrt64/bin/libwinpthread-1.dll  "$BIN/"
-
-          # 4. DLLs KDE Frameworks
           cp /ucrt64/bin/KF5*.dll "$BIN/" || true
-
-          # 5. SQLite
           cp /ucrt64/bin/libsqlite3-0.dll "$BIN/" || true
 
-          # 6. Donnees applicatives
           cp -r "$GITHUB_WORKSPACE/elements"    "$FILES/elements"    || true
           cp -r "$GITHUB_WORKSPACE/lang"        "$FILES/lang"        || true
           cp -r "$GITHUB_WORKSPACE/titleblocks" "$FILES/titleblocks" || true
@@ -153,20 +122,17 @@ jobs:
           cp -r "$GITHUB_WORKSPACE/fonts"       "$FILES/fonts"       || true
           cp -r "$GITHUB_WORKSPACE/ico"         "$FILES/ico"         || true
 
-          # 7. Fichiers texte attendus par le .nsi
           for f in LICENSE ChangeLog CREDIT README ELEMENTS.LICENSE \
                    qet_uninstall_file_associations.reg register_filetypes.bat; do
             cp "$GITHUB_WORKSPACE/$f" "$FILES/$f" 2>/dev/null || true
           done
 
-          # 8. Script NSIS + helpers + images installeur
           cp "$GITHUB_WORKSPACE/build-aux/windows/QET64.nsi"              "$NSIS_ROOT/"
           cp "$GITHUB_WORKSPACE/build-aux/windows/lang_extra.nsh"         "$NSIS_ROOT/" || true
           cp "$GITHUB_WORKSPACE/build-aux/windows/lang_extra_fr.nsh"      "$NSIS_ROOT/" || true
           cp "$GITHUB_WORKSPACE/build-aux/windows/lang_extra_missing.nsh" "$NSIS_ROOT/" || true
           cp -r "$GITHUB_WORKSPACE/build-aux/windows/images"              "$NSIS_ROOT/" || true
 
-          # 9. Script de lancement ("Lancer QET.bat")
           if [ -f "$GITHUB_WORKSPACE/build-aux/windows/Lancer QET.bat" ]; then
             cp "$GITHUB_WORKSPACE/build-aux/windows/Lancer QET.bat" "$NSIS_ROOT/"
           else
@@ -174,26 +140,11 @@ jobs:
               > "$NSIS_ROOT/Lancer QET.bat"
           fi
 
-      - name: Verify nsis_root structure
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          echo "=== Arborescence nsis_root (4 niveaux) ==="
-          find "$GITHUB_WORKSPACE/nsis_root" -maxdepth 4 | sort
-          echo ""
-          echo "=== Verification QElectroTech.exe ==="
-          ls -lh "$GITHUB_WORKSPACE/nsis_root/files/bin/QElectroTech.exe"
-          echo ""
-          echo "=== Nombre de DLLs dans bin/ ==="
-          find "$GITHUB_WORKSPACE/nsis_root/files/bin" -name "*.dll" | wc -l
-
       - name: Extract version for installer name
         shell: msys2 {0}
         id: qet_version
         run: |
           set -euo pipefail
-          # Cherche VERSION dans le bloc project() uniquement
-          # Ex: project(QElectroTech VERSION 0.9.0 LANGUAGES CXX)
           VERSION=$(grep -A5 '^project(' "$GITHUB_WORKSPACE/CMakeLists.txt" \
             | grep -oP '(?<=VERSION )[0-9]+\.[0-9]+[0-9.]*' | head -1 || true)
           [ -z "$VERSION" ] && VERSION="dev"
@@ -201,8 +152,6 @@ jobs:
           FULL_VERSION="${VERSION}+git${GIT_SHORT}_x86_64-win64"
           echo "version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $FULL_VERSION"
-          echo "--- Lignes VERSION dans CMakeLists.txt ---"
-          grep -i 'version' "$GITHUB_WORKSPACE/CMakeLists.txt" | head -10 || true
 
       - name: Patch SOFT_VERSION in QET64.nsi
         shell: msys2 {0}
@@ -213,40 +162,16 @@ jobs:
           sed -i "s|!define SOFT_VERSION .*|!define SOFT_VERSION \"${VERSION}\"|" "$NSI"
           grep 'SOFT_VERSION' "$NSI"
 
-      - name: Prepare inject_cd script
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          # Ecrit le script python d'injection AVANT le step NSIS
-          # pour eviter tout probleme d'echappement dans le YAML
-          printf '%s\n' \
-            'import sys' \
-            'nsi, root = sys.argv[1], sys.argv[2]' \
-            'c = open(nsi, encoding="utf-8", errors="replace").read()' \
-            'open(nsi, "w", encoding="utf-8").write("!cd \"" + root + "\"\n" + c)' \
-            'print("injected: !cd " + root)' \
-            > /tmp/inject_cd.py
-          echo "inject_cd.py ecrit :"
-          cat /tmp/inject_cd.py
-
       - name: Build NSIS installer
         shell: msys2 {0}
+        working-directory: ${{ github.workspace }}/nsis_root
         run: |
           set -euo pipefail
-          NSIS_ROOT="$GITHUB_WORKSPACE/nsis_root"
-          NSI="$NSIS_ROOT/QET64.nsi"
-          NSIS_ROOT_WIN=$(cygpath -w "$NSIS_ROOT")
-          NSI_WIN=$(cygpath -w "$NSI")
-          echo "NSIS_ROOT Windows : $NSIS_ROOT_WIN"
-
-          # Injecter !cd en tete du .nsi pour que NSIS resolve les chemins
-          # relatifs (./files/bin/...) depuis nsis_root/ et non depuis le CWD du runner
-          python3 /tmp/inject_cd.py "$NSI" "$NSIS_ROOT_WIN"
-          echo "--- Debut de QET64.nsi apres injection ---"
-          head -5 "$NSI"
-
+          # working-directory fixe le CWD Windows du processus makensis
+          # makensis resout alors ./files/bin/ depuis nsis_root/ correctement
+          NSI_WIN=$(cygpath -w QET64.nsi)
           makensis "$NSI_WIN"
-          ls -lh "$NSIS_ROOT"/Installer_*.exe
+          ls -lh Installer_*.exe
 
       - name: Move installer to dist/
         shell: msys2 {0}
