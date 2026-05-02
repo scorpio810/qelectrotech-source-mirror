@@ -102,8 +102,15 @@ jobs:
           BIN="$FILES/bin"
           mkdir -p "$BIN"
 
-          # 1. Exécutable
-          cp "$GITHUB_WORKSPACE/build/qelectrotech.exe" "$BIN/QElectroTech.exe"
+          # 1. Exécutable — cmake peut produire qelectrotech.exe ou QElectroTech.exe
+          EXE=$(find "$GITHUB_WORKSPACE/build" -maxdepth 2 -iname "qelectrotech.exe" | head -1)
+          if [ -z "$EXE" ]; then
+            echo "ERROR: qelectrotech.exe not found in build/"
+            find "$GITHUB_WORKSPACE/build" -maxdepth 3 -name "*.exe" || true
+            exit 1
+          fi
+          echo "Found exe: $EXE"
+          cp "$EXE" "$BIN/QElectroTech.exe"
 
           # 2. DLLs Qt + plugins via windeployqt-qt5 (binaire explicitement Qt5)
           #    On utilise windeployqt-qt5 et non windeployqt car le runner peut
@@ -156,6 +163,16 @@ jobs:
             printf '@echo off\r\nstart "" "%%~dp0bin\\QElectroTech.exe" %%*\r\n' \
               > "$NSIS_ROOT/Lancer QET.bat"
           fi
+
+      - name: Verify nsis_root structure before build
+        shell: msys2 {0}
+        run: |
+          echo "=== nsis_root tree ==="
+          find "$GITHUB_WORKSPACE/nsis_root" -maxdepth 4 | sort
+          echo ""
+          echo "=== QElectroTech.exe check ==="
+          ls -lh "$GITHUB_WORKSPACE/nsis_root/files/bin/QElectroTech.exe" \
+            || echo "ERROR: QElectroTech.exe NOT FOUND"
 
       - name: Extract version for installer name
         shell: msys2 {0}
